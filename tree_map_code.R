@@ -7,7 +7,7 @@
 #  in Philadelphia using the tree inventory data from the Philadelphia Parks 
 #  and Recreation (PPR) Department. We will also overlay the map with the 
 #  boundaries of Philadelphia, census tracts, and primary/secondary roads from 
-#  the tigris package to create a simple yet effective basemap.
+#  the tigris package to create a simple & effective basemap.
 
 
 #### Setup ####
@@ -51,38 +51,50 @@ tract_bg <- rbind(tract_nj, tract_pa) %>% # Combine NJ and PA tracts
   st_crop(st_bbox(phl_bound)) %>%
   erase_water()
 
+water_rect <- st_as_sfc(st_bbox(phl_bound), crs = "EPSG:2272")
+
 #### Data manipulation ####
 tract_dbh <- dat %>%
   filter(grepl("PLANETREE", tree_name)) %>%
   st_intersection(phl_tract,.) %>%
+  mutate(count = 1) %>%
   group_by(GEOID) %>%
-  summarize(tree_dbh = mean(tree_dbh, na.rm = TRUE))%>%
+  summarize(tree_dbh = mean(tree_dbh, na.rm = TRUE),
+            count = sum(count))%>%
   st_drop_geometry() %>%
   left_join(phl_tract, by = "GEOID") %>%
-  st_as_sf()
+  st_as_sf() %>%
+  mutate(area = as.numeric(word(st_area(.), 1)),
+         area_sqmi = area / 27878400,
+         tree_p_sqmi = round(count/area_sqmi))
 
 #### Map #### 
-water_rect <- st_as_sfc(st_bbox(phl_bound), crs = "EPSG:2272")
+
 
 ggplot() +
   geom_sf(data = water_rect, fill = "lightblue") +
-  geom_sf(data = tract_bg, fill = "gray90", color = "gray80") +
-  geom_sf(data = tract_dbh, aes(fill = tree_dbh), color = "transparent") +
-  scale_fill_viridis_c(option = "plasma", name = "dbh (in)", labels = scales::comma, direction = -1) +
-  labs(title = "Where are Philly's Biggest Planetrees?", subtitle = "2023 Philadelphia Tree Inventory; n = 16,693", fill = "dbh (in)") +
+  geom_sf(data = tract_bg, fill = "gray25", color = "gray35") +
+  geom_sf(data = tract_dbh, aes(fill = tree_dbh/12, alpha = tree_p_sqmi), color = "transparent") +
+  scale_alpha_continuous(name = "trees/sqmi", range = c(0.1, 1), breaks = c(250, 500, 750, 1000)) + # Explicitly set the legend title here
+  guides(alpha = guide_legend(reverse = TRUE)) +
+  scale_fill_distiller(name = "diameter (ft)", palette = "YlGn", direction = -1, na.value = "white") +
+  annotate("text", x = 2695000, y = 297890, size = 8, family = "Avenir", label = "Where are Philly's Biggest Planetrees?", color = "Beige") +
+  annotate("text", x = 2684000, y = 294000, size = 4, family = "Avenir", label = "2023 Philadelphia Tree Inventory; n = 16,693", color = "Beige") +
   theme_void() +
-  theme(legend.position = c(0.8, 0.2))
+  theme(legend.position = c(0.85, 0.2),
+        text = element_text(family = "Avenir", color = "beige"))
   
   
 #### Histogram ####
 dat %>%
   filter(tree_dbh < 80 & grepl("PLANETREE", tree_name)) %>%
   ggplot() +
-  geom_histogram(aes(x = tree_dbh/12), binwidth = 0.2, fill = "lightblue", color = "transparent") +
-  labs(title = "Planetree Diameter at Breast Height (dbh) Distribution", subtitle = "Philadelphia Tree Inventory 2023", x = "dbh (ft)", y = "trees") +
-  theme_minimal()
+  geom_histogram(aes(x = tree_dbh/12), binwidth = 0.2, fill = "lightgreen", color = "white", alpha = 0.6) +
+ # theme_void() +
+  theme(panel.background = element_rect(fill = "gray30"))
 
 
 #### Challenge ####    
-# Export the map and plot as jpeg files and design a map layout featuring both of them in Canva. 
-# Select a different tree species and use custom fonts, colors, and graphics to make it your own.
+# Select a different tree species and apply one of the color schemes we discussed to tell another story about Philadelphia's trees.
+# Export the map and plot as jpeg files and design a map layout featuring both of them in Canva, using custom fonts, colors, and graphics.
+# 
